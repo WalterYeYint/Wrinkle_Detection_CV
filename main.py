@@ -8,6 +8,8 @@
 import cv2
 import os
 import argparse
+import numpy as np
+from skimage.segmentation import clear_border
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--input", type=str, default="images",
@@ -35,30 +37,51 @@ for file in os.listdir(source_fldr):
 	dim = (width, height)
 	# print(dim)
 	resized_img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+	copied_img = resized_img.copy()
 
 	gray_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2GRAY)
-	# blurred = cv2.GaussianBlur(gray_img, (7, 7), 0)
-
-	# T, thresh = cv2.threshold(gray_img, 120, 255,
-	# 	cv2.THRESH_BINARY)
-	# T, thresh2 = cv2.threshold(gray_img, 70, 255,
-	# 	cv2.THRESH_BINARY_INV)
-	# masked_img = cv2.bitwise_and(thresh, thresh2)
+	
+	hsv = cv2.cvtColor(resized_img, cv2.COLOR_BGR2HSV)
+	lower_white = np.array([0, 0, 100])
+	upper_white = np.array([50, 40, 255])
+	white_masked_img = cv2.inRange(hsv, lower_white, upper_white)
 
 	ret, otsu_img = cv2.threshold(gray_img, 100, 255, cv2.THRESH_BINARY + 
                                             cv2.THRESH_OTSU)
-	masked_img = cv2.bitwise_and(gray_img, otsu_img)
+
+	and_operated_img = cv2.bitwise_and(white_masked_img, otsu_img)
+
+	contours, hierarchy = cv2.findContours(and_operated_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+	max_box = max(contours, key = cv2.contourArea)
+	# max_box = np.array(max_box).reshape((-1,1,2)).astype(np.int32)
+	# print(max_box)
+	cv2.drawContours(copied_img, [max_box], -1, (0, 0, 255), 3) 
+
+	mask = np.zeros_like(and_operated_img)
+	cv2.fillPoly(mask, [max_box], 255)
+	# cv2.drawContours(mask, box_dim, -1, (255, 255, 255), -1, cv2.LINE_AA)
+	masked_img = cv2.bitwise_and(gray_img, mask)
 
 	thresh = cv2.adaptiveThreshold(masked_img, 255,
 		cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 2)
-	
+
 	median_blur = cv2.medianBlur(thresh, aperture_size)
+	no_border_img = clear_border(median_blur)
+
+	output_img = resized_img.copy()
+	contours, hierarchy = cv2.findContours(no_border_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+	# for c in contours:
+	cv2.drawContours(output_img, contours, -1, (0, 0, 255), 3) 
+	# cv2.imwrite()
 
 	cv2.imshow('Input Image', resized_img)
 	# cv2.imshow('Otsu Image', otsu_img)
-	# cv2.imshow('Filtered Image', masked_img)
-	# cv2.imshow('Thresholded Image', thresh)
-	cv2.imshow('Blurred Image', median_blur)
-	# cv2.imshow('Output Image 2', thresh2)
+	cv2.imshow('Image with largest contour', copied_img)
+	# cv2.imshow('AND Operated Image',and_operated_img)
+	# cv2.imshow('Poly Image', mask)
 	# cv2.imshow('Masked Image', masked_img)
+	# cv2.imshow('Thresholded Image', thresh)
+	# cv2.imshow('Blurred Image', median_blur)
+	cv2.imshow('No border Image', no_border_img)
+	cv2.imshow('Output Image', output_img)
 	cv2.waitKey()
