@@ -47,7 +47,7 @@ for file in os.listdir(source_fldr):
 	white_masked_img = cv2.inRange(hsv, lower_white, upper_white)
 
 	ret, otsu_img = cv2.threshold(gray_img, 100, 255, cv2.THRESH_BINARY + 
-                                            cv2.THRESH_OTSU)
+																						cv2.THRESH_OTSU)
 
 	and_operated_img = cv2.bitwise_and(white_masked_img, otsu_img)
 
@@ -55,13 +55,15 @@ for file in os.listdir(source_fldr):
 	max_box = max(contours, key = cv2.contourArea)
 	# max_box = np.array(max_box).reshape((-1,1,2)).astype(np.int32)
 	# print(max_box)
-	cv2.drawContours(copied_img, [max_box], -1, (0, 0, 255), 3) 
+	cv2.drawContours(copied_img, [max_box], -1, (0, 0, 255), 2) 
 
 	mask = np.zeros_like(and_operated_img)
 	cv2.fillPoly(mask, [max_box], 255)
 	# cv2.drawContours(mask, box_dim, -1, (255, 255, 255), -1, cv2.LINE_AA)
 	masked_img = cv2.bitwise_and(gray_img, mask)
 
+	# perform adaptive threshold
+	# cv2.adaptiveThreshold(src, maxValue, adaptiveMethd, thresholdType, blockSize(thickness), C value(quantity))
 	thresh = cv2.adaptiveThreshold(masked_img, 255,
 		cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 11, 2)
 
@@ -71,17 +73,17 @@ for file in os.listdir(source_fldr):
 	output_img = resized_img.copy()
 	contours, hierarchy = cv2.findContours(no_border_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 	# for c in contours:
-	cv2.drawContours(output_img, contours, -1, (0, 0, 255), 3) 
+	cv2.drawContours(output_img, contours, -1, (0, 0, 255), 2) 
 	# cv2.imwrite()
 
 	cv2.imshow('Input Image', resized_img)
 	# cv2.imshow('Otsu Image', otsu_img)
-	cv2.imshow('Image with largest contour', copied_img)
+	# cv2.imshow('Image with largest contour', copied_img)
 	# cv2.imshow('AND Operated Image',and_operated_img)
 	# cv2.imshow('Poly Image', mask)
 	# cv2.imshow('Masked Image', masked_img)
 	# cv2.imshow('Thresholded Image', thresh)
-	# cv2.imshow('Blurred Image', median_blur)
-	cv2.imshow('No border Image', no_border_img)
+	cv2.imshow('Blurred Image', median_blur)
+	# cv2.imshow('No border Image', no_border_img)
 	cv2.imshow('Output Image', output_img)
 	cv2.waitKey()
