@@ -3,7 +3,7 @@
 # python main.py
 ### To run with configs, enter the command below
 # python main.py --input "path to input folder" --resize "percent to resize the image" --aperture "aperture size to be used in median blur"
-# E.g. python main.py --input images --output outputs --resize 10 --aperture 3
+# E.g. python main.py --input images --output outputs --resize 10 --block_size 11 --c_value 2 --aperture 3 --sensitivity_percent 100
 
 import cv2
 import os
@@ -22,6 +22,17 @@ def checker(a):
 # def namestr(obj, namespace):
 #     return [name for name in namespace if namespace[name] is obj]
 
+def find_and_sort_contours(img, mode = cv2.RETR_CCOMP, method = cv2.CHAIN_APPROX_NONE, reverse = True):
+	contours, hierarchy = cv2.findContours(img, mode, method)
+	contours = sorted(contours, key=cv2.contourArea, reverse = reverse)
+	return contours
+
+def fill_contours(img, contours):
+	img = np.zeros_like(img)
+	for contour in contours:
+		cv2.fillPoly(img, [contour], 255)
+	return img
+
 def check_parameters_limit(curr_value, step_value, is_increment = True, is_sensitivity_percent = False):
 	if is_increment == True:
 		if is_sensitivity_percent == True and curr_value >= 100:
@@ -35,7 +46,9 @@ def check_parameters_limit(curr_value, step_value, is_increment = True, is_sensi
 			curr_value -= step_value
 	return curr_value
 
-
+def print_parameters(block_size, c_value, aperture_size, sensitivity_percent):
+	print("Block Size: {}, C Value: {}, Aperture Size: {}, Sensitivity Percent: {}".format(block_size, 
+																														c_value, aperture_size, sensitivity_percent))
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--input", type=str, default="images",
@@ -50,7 +63,7 @@ ap.add_argument("-c", "--c_value", type=int, default=2,
 	help="C value used in adaptive threshold")
 ap.add_argument("-a", "--aperture", type=checker, default=3,
 	help="aperture size to be used in median blur")
-ap.add_argument("-s", "--sensitivity_percent", type=int, default=100,
+ap.add_argument("-s", "--sensitivity_percent", type=int, default=50,
 	help="detection sensitivity percent of defects")
 args = vars(ap.parse_args())
 
@@ -60,8 +73,11 @@ scale_percent = args["resize"] # percent of original size
 block_size = args["block_size"]
 c_value = args["c_value"]
 aperture_size = args["aperture"]
-sensitivity_percent = 100
+sensitivity_percent = args["sensitivity_percent"]
 quit_flag = False
+input_img_name = 'Input Image'
+no_border_img_name = 'No Border Image'
+output_img_name = 'Output Image'
 
 print("The program has initialized...")
 print("Block Size: {}, C Value: {}, Aperture Size: {}\n\n".format(block_size, c_value, aperture_size))
@@ -88,8 +104,8 @@ for file in os.listdir(source_fldr):
 		gray_img = cv2.cvtColor(resized_img, cv2.COLOR_BGR2GRAY)
 		
 		hsv = cv2.cvtColor(resized_img, cv2.COLOR_BGR2HSV)
-		lower_white = np.array([0, 0, 100])
-		upper_white = np.array([50, 40, 255])
+		lower_white = np.array([0, 0, 0])
+		upper_white = np.array([180, 60, 255])
 		white_masked_img = cv2.inRange(hsv, lower_white, upper_white)
 
 		ret, otsu_img = cv2.threshold(gray_img, 100, 255, cv2.THRESH_BINARY + 
@@ -114,20 +130,21 @@ for file in os.listdir(source_fldr):
 			cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, block_size, c_value)
 
 		median_blur = cv2.medianBlur(thresh, aperture_size)
-		no_border_img = clear_border(median_blur)
 
-		contours, hierarchy = cv2.findContours(no_border_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-		random.shuffle(contours)
+		contours = find_and_sort_contours(median_blur)[2:]
+
+		bordered_img = fill_contours(gray_img, contours)
+		no_border_img = clear_border(bordered_img)
+
+		contours = find_and_sort_contours(no_border_img)
 
 		# Calculating sensitivity percent
 		contour_quantity = math.floor(len(contours) * sensitivity_percent / 100)
-
-		contour_adjusted_img = np.zeros_like(no_border_img)
 		if len(contours) > contour_quantity:
 			contours = contours[0:contour_quantity]
-		for contour in contours:
-			cv2.fillPoly(contour_adjusted_img, [contour], 255)
-		cv2.fillPoly(contour_adjusted_img, max_box, 255)
+		
+		no_border_img = fill_contours(gray_img, contours)
+		cv2.fillPoly(no_border_img, max_box, 255)
 		# print(len(contours))
 		
 		output_img = resized_img.copy()
@@ -136,44 +153,57 @@ for file in os.listdir(source_fldr):
 		# cv2.imwrite()
 
 
-		cv2.imshow('Input Image', resized_img)
+		cv2.imshow(input_img_name, resized_img)
 		# cv2.imshow('Otsu Image', otsu_img)
 		# cv2.imshow('Image with largest contour', copied_img)
 		# cv2.imshow('AND Operated Image',and_operated_img)
 		# cv2.imshow('Poly Image', mask)
 		# cv2.imshow('Masked Image', masked_img)
 		# cv2.imshow('Thresholded Image', thresh)
-		# cv2.imshow('Blurred Image', median_blur)
-		# cv2.imshow('No border Image', no_border_img)
-		cv2.imshow('Contour Adjusted Image', contour_adjusted_img)
-		cv2.imshow('Output Image', output_img)
-		key = cv2.waitKey()
+		# cv2.imshow('Blurred Image', median_blur)	
+		# cv2.imshow('Bordered Image', bordered_img)
+		cv2.imshow(no_border_img_name, no_border_img)
+		cv2.imshow(output_img_name, output_img)
+		key = cv2.waitKey(1000)
 		# if the `q` key was pressed, break from the loop
 		if key == ord("n"):
 			print("Skipping to next image...")
 			break
 		elif key == ord("w"):
 			block_size = check_parameters_limit(block_size, 2, True)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("s"):
 			block_size = check_parameters_limit(block_size, 2, False)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("e"):
 			c_value = check_parameters_limit(c_value, 1, True)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("d"):
 			c_value = check_parameters_limit(c_value, 1, False)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("r"):
 			aperture_size = check_parameters_limit(aperture_size, 2, True)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("f"):
 			aperture_size = check_parameters_limit(aperture_size, 2, False)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("t"):
 			sensitivity_percent = check_parameters_limit(sensitivity_percent, 10, True, True)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("g"):
 			sensitivity_percent = check_parameters_limit(sensitivity_percent, 10, False, True)
+			print_parameters(block_size, c_value, aperture_size, sensitivity_percent)
 		elif key == ord("q"):
 			print("Quitting...")
 			quit_flag = True
 			break
-		print("Block Size: {}, C Value: {}, Aperture Size: {}, Sensitivity Percent: {}".format(block_size, 
-																														c_value, aperture_size, sensitivity_percent))
+		input_window = cv2.getWindowProperty(input_img_name,cv2.WND_PROP_VISIBLE)
+		no_border_window = cv2.getWindowProperty(no_border_img_name,cv2.WND_PROP_VISIBLE)
+		output_window = cv2.getWindowProperty(output_img_name,cv2.WND_PROP_VISIBLE)
+		if input_window < 1 or no_border_window < 1 or output_window < 1:  
+			print("Quitting...")
+			quit_flag = True      
+			break        
 	if quit_flag == True:
 		break
 cv2.destroyAllWindows()
