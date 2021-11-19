@@ -63,7 +63,7 @@ ap.add_argument("-c", "--c_value", type=int, default=2,
 	help="C value used in adaptive threshold")
 ap.add_argument("-a", "--aperture", type=checker, default=3,
 	help="aperture size to be used in median blur")
-ap.add_argument("-s", "--sensitivity_percent", type=int, default=50,
+ap.add_argument("-s", "--sensitivity_percent", type=int, default=70,
 	help="detection sensitivity percent of defects")
 args = vars(ap.parse_args())
 
